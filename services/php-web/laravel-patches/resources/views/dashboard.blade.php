@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function loadTrend() {
       try {
-        const r = await fetch('/api/iss/trend?limit=240');
+        const r = await fetch('/iss/trend?limit=240');
         const js = await r.json();
         const pts = Array.isArray(js.points) ? js.points.map(p => [p.lat, p.lon]) : [];
         if (pts.length) {
@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     track.innerHTML = '<div class="p-3 text-muted">Загрузка…</div>';
     info.textContent= '';
     try{
-      const url = '/api/jwst/feed?'+new URLSearchParams(qs).toString();
+      const url = '/jwst/feed?'+new URLSearchParams(qs).toString();
       const r = await fetch(url);
       const js = await r.json();
       track.innerHTML = '';
@@ -266,7 +266,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         async function load(q){
           body.innerHTML = '<tr><td colspan="5" class="text-muted">Загрузка…</td></tr>';
-          const url = '/api/astro/events?' + new URLSearchParams(q).toString();
+          const url = '/astro/events?' + new URLSearchParams(q).toString();
           try{
             const r  = await fetch(url);
             const js = await r.json();

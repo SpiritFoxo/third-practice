@@ -8,5 +8,4 @@
 -Route::get('/', function() { return redirect('/osdr'); });
 -Route::get('/osdr', [OsdrController::class, 'index']);
 -
--// учебные уязвимые маршруты проекта остаются без изменений
 -

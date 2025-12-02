@@ -11,7 +11,7 @@ class DashboardController extends Controller
     public function index()
     {
         $iss = Cache::remember('iss_last_position', 10, function () {
-            $base = config('services.iss_rust.base_uri');
+            $base = getenv('RUST_BASE') ?: 'http://go_iss:3000';
             try {
                 return Http::timeout(2)->get("$base/last")->json() ?? [];
             } catch (\Exception $e) {

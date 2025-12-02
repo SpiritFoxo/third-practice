@@ -67,6 +67,7 @@ services:
       context: ./services/php-web
     container_name: php_web
     environment:
+      RUST_BASE: http://go_iss:3000
       JWST_HOST: https://api.jwstapi.com
       JWST_API_KEY: baa96cdf-4a82-45f1-b986-d10a96826442
       JWST_EMAIL: burnfeniks@yandex.ru

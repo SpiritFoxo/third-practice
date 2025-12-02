@@ -1,20 +1,30 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-
-Route::get('/', fn() => redirect('/dashboard'));
-
-// Панели
-Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index']);
-Route::get('/osdr',      [\App\Http\Controllers\OsdrController::class,      'index']);
-
-// Прокси к rust_iss
-Route::get('/api/iss/last',  [\App\Http\Controllers\ProxyController::class, 'last']);
-Route::get('/api/iss/trend', [\App\Http\Controllers\ProxyController::class, 'trend']);
-
-// JWST галерея (JSON)
-Route::get('/api/jwst/feed', [\App\Http\Controllers\DashboardController::class, 'jwstFeed']);
-Route::get("/api/astro/events", [\App\Http\Controllers\AstroController::class, "events"]);
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\IssController;
+use App\Http\Controllers\OsdrController;
+use App\Http\Controllers\ProxyController;
 use App\Http\Controllers\AstroController;
-Route::get('/page/{slug}', [\App\Http\Controllers\CmsController::class, 'page']);
-Route::get('/page/{slug}', [\App\Http\Controllers\CmsController::class, 'page']);
+use App\Http\Controllers\CmsController;
+use App\Http\Controllers\UploadController;
+Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+// Страница МКС
+Route::get('/iss', [IssController::class, 'index'])->name('iss');
+
+// Прокси-маршруты для JS на фронтенде (обращаются к go_iss через PHP)
+Route::get('/last', [ProxyController::class, 'last']);
+Route::get('/iss/trend', [ProxyController::class, 'trend']);
+
+// Страница OSDR (данные NASA)
+Route::get('/osdr', [OsdrController::class, 'index'])->name('osdr');
+
+// Астрономические события (AJAX запрос)
+Route::get('/astro/events', [AstroController::class, 'events'])->name('astro.events');
+
+// CMS страницы (например, /cms/welcome)
+Route::get('/cms/{slug}', [CmsController::class, 'page'])->name('cms.page');
+
+// Загрузка файлов
+Route::post('/upload', [UploadController::class, 'store'])->name('upload.store');
