@@ -1,7 +1,6 @@
 <?php
 
 namespace App\Http\Controllers;
-
 use App\Contracts\AstronomyClientInterface;
 use App\Http\Requests\GetAstroEventsRequest;
 use App\Jobs\UpdateAstronomyCacheJob;
@@ -22,14 +21,16 @@ class AstroController extends Controller
         $days = 7;
 
         $key = "astro_events:{$lat}:{$lon}:{$days}:" . now()->format('Y-m-d');
+        
         if (Cache::has($key)) {
             $events = $this->astroClient->getEvents($lat, $lon, $days);
+            
             return response()->json([
                 'status' => 'ready',
                 'data' => AstroEventResource::collection($events)
             ]);
         }
-
+        
         UpdateAstronomyCacheJob::dispatch($lat, $lon);
 
         return response()->json([

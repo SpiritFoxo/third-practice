@@ -30,14 +30,28 @@ class UpdateAstronomyCacheJob implements ShouldQueue
         $days = 7;
         $key = "astro_events:{$this->lat}:{$this->lon}:{$days}:" . now()->format('Y-m-d');
         
-        Cache::forget($key);
-        $events = $client->getEvents($this->lat, $this->lon, $days);
+        try {
+            Cache::forget($key);
 
-        Log::info("Job finished: Cache updated, found " . $events->count() . " events.");
+            $events = $client->getEvents($this->lat, $this->lon, $days);
+
+            Log::info("Job finished: Cache updated, found " . $events->count() . " events.");
+
+        } catch (\Throwable $e) {
+             Log::error("Astro Job failed during execution: " . $e->getMessage(), [
+                 'exception' => get_class($e),
+                 'trace' => $e->getTraceAsString(),
+                 'context' => [
+                     'lat' => $this->lat,
+                     'lon' => $this->lon,
+                 ]
+             ]);
+             throw $e; 
+        }
     }
-    
+
     public function failed(\Throwable $exception): void
     {
-        Log::error("Job failed: " . $exception->getMessage());
+        Log::error("Job failed (Queue Worker): " . $exception->getMessage());
     }
 }

@@ -20,31 +20,50 @@ class AstronomyApiService implements AstronomyClientInterface
     {
         $from = now('UTC')->toDateString();
         $to = now('UTC')->addDays($days)->toDateString();
+        $authString = base64_encode("{$this->appId}:{$this->secret}");
 
         try {
             $response = Http::withBasicAuth($this->appId, $this->secret)
-                ->timeout(5)
+                ->timeout(10)
                 ->retry(2, 100)
-                ->withUserAgent('monolith-iss/2.0')
-                ->get('https://api.astronomyapi.com/api/v2/bodies/events', [
+                ->withUserAgent('Chrome/142.0.0.0')
+                ->withOptions(['verify' => false])
+                ->get('https://api.astronomyapi.com/api/v2/bodies/events/Sun', [
                     'latitude' => $lat,
                     'longitude' => $lon,
-                    'from' => $from,
-                    'to' => $to,
+                    'from_date' => $from,
+                    'to_date' => $to,
+                    'time' => date('H:i:s'),
+                    'elevation' => 0 
                 ]);
-
             if ($response->failed()) {
-                throw new ExternalServiceException("AstronomyAPI error: " . $response->status());
+                throw new ExternalServiceException("AstronomyAPI error: " . $response->status() . " Body: " . $response->body());
             }
 
-            $data = $response->json('data');
+            $rows = $response->json('data.rows', []);
             
-            return collect($data)->map(fn($item) => new AstroEventData(
-                name: $item['name'] ?? 'Unknown Event',
-                date: $item['date'] ?? '',
-                description: $item['description'] ?? null,
-                raw: $item
-            ));
+            return collect($rows)->flatMap(function ($row) {
+                $bodyName = $row['body']['name'] ?? 'Unknown Object';
+                $events = $row['events'] ?? [];
+
+                return collect($events)->map(function ($event) use ($bodyName) {
+                    
+                    $date = $event['eventHighlights']['peak']['date'] 
+                        ?? $event['eventHighlights']['partialStart']['date']
+                        ?? $event['rise'] 
+                        ?? $event['set'] 
+                        ?? now()->toIso8601String();
+
+                    $typeName = ucfirst(str_replace('_', ' ', $event['type'] ?? 'event'));
+
+                    return new AstroEventData(
+                        name: "{$bodyName}: {$typeName}",
+                        date: $date,
+                        description: "Event type: {$typeName}. Body: {$bodyName}",
+                        raw: $event
+                    );
+                });
+            })->values();
 
         } catch (ConnectionException $e) {
             throw new ExternalServiceException("AstronomyAPI unavailable", 503, $e);
