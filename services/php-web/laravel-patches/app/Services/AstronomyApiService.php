@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services\Astronomy;
+namespace App\Services;
 
 use App\Contracts\AstronomyClientInterface;
 use App\DTO\AstroEventData;

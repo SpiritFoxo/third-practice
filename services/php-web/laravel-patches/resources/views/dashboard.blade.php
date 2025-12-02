@@ -303,7 +303,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     </script>
 
 
-{{-- ===== Данный блок ===== --}}
+<!-- {{-- ===== Данный блок ===== --}}
 <div class="card mt-3">
   <div class="card-header fw-semibold">CMS</div>
   <div class="card-body">
@@ -333,7 +333,7 @@ document.addEventListener('DOMContentLoaded', async function () {
       }
     @endphp
   </div>
-</div>
+</div> -->
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -352,7 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
-{{-- ===== CMS-блок из БД (нарочно сырая вставка) ===== --}}
+<!-- {{-- ===== CMS-блок из БД (нарочно сырая вставка) ===== --}}
 <div class="card mt-3">
   <div class="card-header fw-semibold">CMS — блок из БД</div>
   <div class="card-body">
@@ -366,4 +366,4 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     @endphp
   </div>
-</div>
+</div> -->

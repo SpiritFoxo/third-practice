@@ -1,6 +1,17 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Contracts\AstronomyClientInterface;
+use App\Services\AstronomyApiService;
+use App\Services\CachedAstronomyClient;
+app()->bind(AstronomyClientInterface::class, function () {
+    $service = new AstronomyApiService(
+        env('ASTRO_APP_ID'),
+        env('ASTRO_APP_SECRET')
+    );
+
+    return new CachedAstronomyClient($service);
+});
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\IssController;
 use App\Http\Controllers\OsdrController;
@@ -8,6 +19,7 @@ use App\Http\Controllers\ProxyController;
 use App\Http\Controllers\AstroController;
 use App\Http\Controllers\CmsController;
 use App\Http\Controllers\UploadController;
+
 Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
 // Страница МКС
@@ -25,6 +37,13 @@ Route::get('/astro/events', [AstroController::class, 'events'])->name('astro.eve
 
 // CMS страницы (например, /cms/welcome)
 Route::get('/cms/{slug}', [CmsController::class, 'page'])->name('cms.page');
+
+// JWST галерея (JSON)
+
+Route::get('/api/jwst/feed', [\App\Http\Controllers\DashboardController::class, 'jwstFeed']);
+Route::get("/api/astro/events", [\App\Http\Controllers\AstroController::class, "events"]);
+Route::get('/page/{slug}', [\App\Http\Controllers\CmsController::class, 'page']);
+Route::get('/page/{slug}', [\App\Http\Controllers\CmsController::class, 'page']);
 
 // Загрузка файлов
 Route::post('/upload', [UploadController::class, 'store'])->name('upload.store');

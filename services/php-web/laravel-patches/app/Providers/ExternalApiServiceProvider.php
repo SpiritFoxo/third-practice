@@ -10,16 +10,14 @@ use App\Services\Astronomy\CachedAstronomyClient;
 class ExternalApiServiceProvider extends ServiceProvider
 {
     public function register(): void
-    {
-        $this->app->bind(AstronomyClientInterface::class, function ($app) {
-            $config = $app['config']['services.astro_api'];
-            
-            $service = new AstronomyApiService(
-                $config['app_id'] ?? '',
-                $config['secret'] ?? ''
-            );
+{
+    $this->app->bind(AstronomyClientInterface::class, function ($app) {
+        $service = new AstronomyApiService(
+            env('ASTRO_APP_ID'),
+            env('ASTRO_APP_SECRET')
+        );
 
-            return new CachedAstronomyClient($service);
-        });
-    }
+        return new CachedAstronomyClient($service);
+    });
+}
 }
