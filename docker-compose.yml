@@ -5,6 +5,7 @@ volumes:
   pgdata:
   appdata:
   csvdata:
+  redisdata:
 
 services:
   db:
@@ -45,6 +46,22 @@ services:
   #   ports:
   #     - "8081:3000"
 
+  redis:
+    image: redis:7-alpine
+    container_name: iss_redis
+    command: redis-server --appendonly yes --requirepass monoredispass
+    volumes:
+      - redisdata:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "monoredispass", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    ports:
+      - "6379:6379"
+
   php:
     build:
       context: ./services/php-web
@@ -65,11 +82,19 @@ services:
       DB_DATABASE: monolith
       DB_USERNAME: monouser
       DB_PASSWORD: monopass
+      REDIS_HOST: redis
+      REDIS_PASSWORD: monoredispass
+      REDIS_PORT: 6379
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
     depends_on:
       db:
         condition: service_healthy
       go_iss:
         condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - backend
     volumes:
@@ -135,5 +160,33 @@ services:
         condition: service_healthy
     volumes:
       - csvdata:/data/csv
+    networks:
+      - backend
+  
+  queue_worker:
+    build:
+      context: ./services/php-web
+    container_name: php_worker
+    command: php artisan queue:work redis --tries=3 --timeout=90
+    environment:
+      APP_ENV: local
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: monolith
+      DB_USERNAME: monouser
+      DB_PASSWORD: monopass
+      REDIS_HOST: redis
+      REDIS_PASSWORD: monoredispass
+      REDIS_PORT: 6379
+      JWST_API_KEY: baa96cdf-4a82-45f1-b986-d10a96826442
+      # ... добавьте остальные API ключи ...
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    volumes:
+      - appdata:/var/www/html
     networks:
       - backend
