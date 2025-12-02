@@ -39,11 +39,7 @@ Route::get('/astro/events', [AstroController::class, 'events'])->name('astro.eve
 Route::get('/cms/{slug}', [CmsController::class, 'page'])->name('cms.page');
 
 // JWST галерея (JSON)
-
-Route::get('/api/jwst/feed', [\App\Http\Controllers\DashboardController::class, 'jwstFeed']);
-Route::get("/api/astro/events", [\App\Http\Controllers\AstroController::class, "events"]);
-Route::get('/page/{slug}', [\App\Http\Controllers\CmsController::class, 'page']);
-Route::get('/page/{slug}', [\App\Http\Controllers\CmsController::class, 'page']);
+Route::get('/jwst/feed', [DashboardController::class, 'jwstFeed']);
 
 // Загрузка файлов
 Route::post('/upload', [UploadController::class, 'store'])->name('upload.store');
