@@ -6,7 +6,5 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as Middleware;
 
 class VerifyCsrfToken extends Middleware
 {
-    protected $except = [
-        '/upload', // disabled CSRF on purpose for training
-    ];
+    protected $except = [];
 }
