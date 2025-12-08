@@ -125,27 +125,30 @@ services:
       - backend
     ports:
       - "8080:80"
-
-  pascal_legacy:
+  
+  go_reporter:
     build:
-      context: ./services/pascal-legacy
-    container_name: pascal_legacy
+      context: ./services/go-csv
+    container_name: go_reporter
     environment:
       CSV_OUT_DIR: /data/csv
-      GEN_PERIOD_SEC: ${PAS_LEGACY_PERIOD:-300}
       PGHOST: db
-      PGPORT: 5432
+      PGPORT: "5432"
       PGUSER: monouser
       PGPASSWORD: monopass
       PGDATABASE: monolith
+
+      CRON_SCHEDULE: "*/5 * * * *"
+
     depends_on:
       db:
         condition: service_healthy
+
     volumes:
       - csvdata:/data/csv
     networks:
       - backend
-  
+
   queue_worker:
     build:
       context: ./services/php-web
