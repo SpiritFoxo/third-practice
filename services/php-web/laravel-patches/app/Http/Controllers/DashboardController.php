@@ -6,33 +6,80 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use App\Support\JwstHelper;
+use App\Contracts\AstronomyClientInterface;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 
 class DashboardController extends Controller
 {
     public function index()
     {
-        $iss = Cache::remember('iss_last_position', 10, function () {
+       $iss = Cache::remember('iss_last_position', 10, function () {
             $base = getenv('RUST_BASE') ?: 'http://go_iss:3000';
             try {
-                return Http::timeout(2)->get("$base/last")->json() ?? [];
+                $data = Http::timeout(2)->get("$base/last")->json() ?? [];
+                return array_change_key_case($data, CASE_LOWER);
             } catch (\Exception $e) {
                 return [];
             }
         });
 
+
+        $trend = Cache::remember('iss_trend_data', 30, function () {
+            $base = getenv('RUST_BASE') ?: 'http://go_iss:3000';
+            try {
+                return Http::timeout(2)->get("$base/iss/trend")->json() ?? [];
+            } catch (\Exception $e) {
+                return [];
+            }
+        });
+        $lat = $iss['payload']['latitude'] ?? 55.75;
+        $lon = $iss['payload']['longitude'] ?? 37.61;
+
+        $astroKey = "astro_dashboard:".round($lat, 1).":".round($lon, 1);
+        $astroEventsArray = Cache::remember($astroKey, 3600, function () use ($lat, $lon) {
+            try {
+                $events = $this->astroClient->getEvents($lat, $lon, 365);
+                return collect($events)->map(function ($e) {
+                    return [
+                        'name' => data_get($e, 'name'),
+                        'date' => data_get($e, 'date'),
+                        'description' => data_get($e, 'description'),
+                        'raw' => data_get($e, 'raw'),
+                    ];
+                })->values()->all();
+            } catch (\Exception $e) {
+                \Log::warning('Astro API failed: '.$e->getMessage());
+                return [];
+            }
+        });
+
+        $astroEvents = collect($astroEventsArray)->map(fn($item) => is_array($item) ? (object)$item : $item);
+
+        $jwstItems = Cache::remember('jwst_feed_dashboard', 300, function () {
+            $jw = new JwstHelper();
+            $resp = $jw->get('all/type/jpg', ['page'=>1, 'perPage'=>6]);
+            $list = $resp['body'] ?? ($resp['data'] ?? []);
+            
+            $cleanItems = [];
+            foreach ($list as $it) {
+                $url = JwstHelper::pickImageUrl($it);
+                if (!$url) continue;
+                
+                $cleanItems[] = [
+                    'url' => $url,
+                    'title' => $it['details']['mission'] ?? $it['program'] ?? 'JWST Image',
+                    'id' => $it['id'] ?? uniqid(),
+                ];
+            }
+            return $cleanItems;
+        });
+
         return view('dashboard', [
             'iss' => $iss,
-            'metrics' => [
-                'iss_speed' => $iss['payload']['velocity'] ?? null,
-                'iss_alt'   => $iss['payload']['altitude'] ?? null,
-                'neo_total' => 0,
-            ],
-            'trend' => [],
-            'jw_gallery' => [],
-            'jw_observation_raw' => [], 
-            'jw_observation_summary' => [],
-            'jw_observation_images' => [], 
-            'jw_observation_files' => [],
+            'trend' => $trend,
+            'astroEvents' => $astroEvents,
+            'jwstItems' => $jwstItems,
         ]);
     }
 
@@ -46,7 +93,7 @@ class DashboardController extends Controller
         $per   = max(1, min(60, (int)$r->query('perPage', 24)));
         $jw = new JwstHelper();
 
-      // выбираем эндпоинт
+
         $path = 'all/type/jpg';
         if ($src === 'suffix' && $sfx !== '') $path = 'all/suffix/'.ltrim($sfx,'/');
         if ($src === 'program' && $prog !== '') $path = 'program/id/'.rawurlencode($prog);
@@ -55,7 +102,6 @@ class DashboardController extends Controller
         $items = [];
         foreach ($list as $it) {
             if (!is_array($it)) continue;
-            // выбираем валидную картинку
             $url = null;
             $loc = $it['location'] ?? $it['url'] ?? null;
             $thumb = $it['thumbnail'] ?? null;
@@ -66,7 +112,6 @@ class DashboardController extends Controller
                 $url = \App\Support\JwstHelper::pickImageUrl($it);
             }
             if (!$url) continue;
-            // фильтр по инструменту
             $instList = [];
             foreach (($it['details']['instruments'] ?? []) as $I) {
                 if (is_array($I) && !empty($I['instrument'])) $instList[] = strtoupper($I['instrument']);
@@ -88,10 +133,6 @@ class DashboardController extends Controller
             ];
             if (count($items) >= $per) break;
         }
-        return response()->json([
-            'source' => $path,
-            'count'  => count($items),
-            'items'  => $items,
-        ]);
+        return parent::jwstFeed($r);
     }
 }
