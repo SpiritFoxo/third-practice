@@ -7,6 +7,7 @@ use App\Jobs\UpdateAstronomyCacheJob;
 use App\Http\Resources\AstroEventResource;
 use Illuminate\Support\Facades\Cache;
 
+
 class AstroController extends Controller
 {
     public function __construct(

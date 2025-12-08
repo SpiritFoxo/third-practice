@@ -6,15 +6,20 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use App\Support\JwstHelper;
+use App\Providers\ExternalApiServiceProvider;
 use App\Contracts\AstronomyClientInterface;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 
 class DashboardController extends Controller
 {
+    public function __construct(
+        private AstronomyClientInterface $astroClient
+    ) {}
+
     public function index()
     {
-       $iss = Cache::remember('iss_last_position', 10, function () {
+        $iss = Cache::remember('iss_last_position', 10, function () {
             $base = getenv('RUST_BASE') ?: 'http://go_iss:3000';
             try {
                 $data = Http::timeout(2)->get("$base/last")->json() ?? [];
@@ -24,7 +29,6 @@ class DashboardController extends Controller
             }
         });
 
-
         $trend = Cache::remember('iss_trend_data', 30, function () {
             $base = getenv('RUST_BASE') ?: 'http://go_iss:3000';
             try {
@@ -33,13 +37,19 @@ class DashboardController extends Controller
                 return [];
             }
         });
+        
         $lat = $iss['payload']['latitude'] ?? 55.75;
         $lon = $iss['payload']['longitude'] ?? 37.61;
 
         $astroKey = "astro_dashboard:".round($lat, 1).":".round($lon, 1);
         $astroEventsArray = Cache::remember($astroKey, 3600, function () use ($lat, $lon) {
             try {
+                \Log::info('Fetching astro events', ['lat' => $lat, 'lon' => $lon]);
+                
                 $events = $this->astroClient->getEvents($lat, $lon, 365);
+                
+                \Log::info('Astro events fetched', ['count' => $events->count()]);
+                
                 return collect($events)->map(function ($e) {
                     return [
                         'name' => data_get($e, 'name'),
@@ -49,7 +59,10 @@ class DashboardController extends Controller
                     ];
                 })->values()->all();
             } catch (\Exception $e) {
-                \Log::warning('Astro API failed: '.$e->getMessage());
+                \Log::error('Astro API failed: '.$e->getMessage(), [
+                    'exception' => get_class($e),
+                    'trace' => $e->getTraceAsString()
+                ]);
                 return [];
             }
         });
@@ -92,7 +105,6 @@ class DashboardController extends Controller
         $page  = max(1, (int)$r->query('page', 1));
         $per   = max(1, min(60, (int)$r->query('perPage', 24)));
         $jw = new JwstHelper();
-
 
         $path = 'all/type/jpg';
         if ($src === 'suffix' && $sfx !== '') $path = 'all/suffix/'.ltrim($sfx,'/');

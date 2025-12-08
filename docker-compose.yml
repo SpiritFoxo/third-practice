@@ -153,6 +153,7 @@ services:
     build:
       context: ./services/php-web
     container_name: php_worker
+    restart: always
     command: php artisan queue:work redis --tries=3 --timeout=90
     environment:
       APP_ENV: local
