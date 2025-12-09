@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS telemetry_legacy (
     recorded_at TIMESTAMPTZ NOT NULL,
     voltage NUMERIC(6,2) NOT NULL,
     temp NUMERIC(6,2) NOT NULL,
-    source_file TEXT NOT NULL
+    source_file TEXT NOT NULL,
+    is_valid BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS cms_pages (
@@ -21,11 +22,3 @@ CREATE TABLE IF NOT EXISTS cms_pages (
     title TEXT NOT NULL,
     body TEXT NOT NULL
 );
-
--- Seed with deliberately unsafe content for XSS practice
-INSERT INTO cms_pages(slug, title, body)
-VALUES
-('welcome', 'Добро пожаловать', '<h3>Демо контент</h3><p>Этот текст хранится в БД</p>'),
-('unsafe', 'Небезопасный пример', '<script>console.log("XSS training")
-</script><p>Если вы видите всплывашку значит защита не работает</p>')
-ON CONFLICT DO NOTHING;

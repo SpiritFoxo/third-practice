@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"log"
@@ -11,6 +12,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/xuri/excelize/v2"
 )
 
 var (
@@ -18,9 +21,17 @@ var (
 	errorLogger *log.Logger
 )
 
+type TelemetryData struct {
+	RecordedAt time.Time
+	Voltage    float64
+	Temp       float64
+	IsValid    bool
+	SourceFile string
+}
+
 func initLoggers() {
-	infoLogger = log.New(os.Stdout, "[LegacyCSV] INFO: ", log.LstdFlags)
-	errorLogger = log.New(os.Stderr, "[LegacyCSV] ERROR: ", log.LstdFlags)
+	infoLogger = log.New(os.Stdout, "[GenService] INFO: ", log.LstdFlags)
+	errorLogger = log.New(os.Stderr, "[GenService] ERROR: ", log.LstdFlags)
 }
 
 func getEnvDef(name, def string) string {
@@ -34,7 +45,91 @@ func randFloat(minV, maxV float64) float64 {
 	return minV + rand.Float64()*(maxV-minV)
 }
 
-func generateCSV(outDir string) (string, error) {
+func generateData(filename string) TelemetryData {
+	return TelemetryData{
+		RecordedAt: time.Now(),
+		Voltage:    randFloat(3.2, 12.6),
+		Temp:       randFloat(-50.0, 80.0),
+		IsValid:    rand.Intn(2) == 1,
+		SourceFile: filename,
+	}
+}
+
+func saveCSV(outDir, filename string, data TelemetryData) (string, error) {
+	fullpath := filepath.Join(outDir, filename)
+	f, err := os.Create(fullpath)
+	if err != nil {
+		return "", fmt.Errorf("create csv file: %w", err)
+	}
+	defer f.Close()
+
+	writer := csv.NewWriter(f)
+	defer writer.Flush()
+
+	headers := []string{"recorded_at", "voltage", "temp", "is_valid", "source_file"}
+	if err := writer.Write(headers); err != nil {
+		return "", err
+	}
+
+	tStr := data.RecordedAt.Format("2006-01-02 15:04:05")
+	vStr := fmt.Sprintf("%.2f", data.Voltage)
+	tempStr := fmt.Sprintf("%.2f", data.Temp)
+	boolStr := "ЛОЖЬ"
+	if data.IsValid {
+		boolStr = "ИСТИНА"
+	}
+
+	record := []string{tStr, vStr, tempStr, boolStr, data.SourceFile}
+	if err := writer.Write(record); err != nil {
+		return "", err
+	}
+
+	return fullpath, nil
+}
+
+func saveXLSX(outDir, filenameBase string, data TelemetryData) (string, error) {
+	xlsxName := filenameBase + ".xlsx"
+	fullpath := filepath.Join(outDir, xlsxName)
+
+	f := excelize.NewFile()
+	defer func() {
+		if err := f.Close(); err != nil {
+			errorLogger.Println(err)
+		}
+	}()
+
+	sheet := "Sheet1"
+	headers := []string{"Time (Timestamp)", "Voltage (Num)", "Temp (Num)", "Valid (Bool)", "Source (Text)"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheet, cell, h)
+	}
+
+	f.SetCellValue(sheet, "A2", data.RecordedAt)
+	styleID, _ := f.NewStyle(&excelize.Style{
+		NumFmt: 22,
+	})
+	f.SetCellStyle(sheet, "A2", "A2", styleID)
+
+	f.SetCellValue(sheet, "B2", data.Voltage)
+
+	f.SetCellValue(sheet, "C2", data.Temp)
+
+	f.SetCellValue(sheet, "D2", data.IsValid)
+
+	f.SetCellValue(sheet, "E2", data.SourceFile)
+
+	f.SetColWidth(sheet, "A", "A", 20)
+	f.SetColWidth(sheet, "E", "E", 30)
+
+	if err := f.SaveAs(fullpath); err != nil {
+		return "", fmt.Errorf("save xlsx: %w", err)
+	}
+
+	return fullpath, nil
+}
+
+func generateFiles(outDir string) (string, error) {
 	if outDir == "" {
 		return "", errors.New("outDir is empty")
 	}
@@ -43,24 +138,25 @@ func generateCSV(outDir string) (string, error) {
 	}
 
 	ts := time.Now().Format("20060102_150405")
-	fn := "telemetry_" + ts + ".csv"
-	fullpath := filepath.Join(outDir, fn)
+	baseName := "telemetry_" + ts
+	csvName := baseName + ".csv"
 
-	f, err := os.Create(fullpath)
+	data := generateData(csvName)
+
+	csvPath, err := saveCSV(outDir, csvName, data)
 	if err != nil {
-		return "", fmt.Errorf("create file: %w", err)
+		return "", err
 	}
-	defer f.Close()
+	infoLogger.Printf("CSV generated: %s", csvPath)
 
-	_, _ = fmt.Fprintln(f, "recorded_at,voltage,temp,source_file")
-	recordedAt := time.Now().Format("2006-01-02 15:04:05")
-	voltage := fmt.Sprintf("%.2f", randFloat(3.2, 12.6))
-	temp := fmt.Sprintf("%.2f", randFloat(-50.0, 80.0))
-	line := fmt.Sprintf("%s,%s,%s,%s", recordedAt, voltage, temp, fn)
-	_, _ = fmt.Fprintln(f, line)
+	xlsxPath, err := saveXLSX(outDir, baseName, data)
+	if err != nil {
+		errorLogger.Printf("Failed to generate XLSX: %v", err)
+	} else {
+		infoLogger.Printf("XLSX generated: %s", xlsxPath)
+	}
 
-	infoLogger.Printf("CSV generated: %s (record: %s)", fullpath, line)
-	return fullpath, nil
+	return csvPath, nil
 }
 
 func runPsqlCopy(ctx context.Context, fullpath string) error {
@@ -71,7 +167,7 @@ func runPsqlCopy(ctx context.Context, fullpath string) error {
 
 	connStr := fmt.Sprintf("host=%s port=%s user=%s dbname=%s", pghost, pgport, pguser, pgdb)
 
-	copyCmd := fmt.Sprintf("\\copy telemetry_legacy(recorded_at, voltage, temp, source_file) FROM '%s' WITH (FORMAT csv, HEADER true)", fullpath)
+	copyCmd := fmt.Sprintf("\\copy telemetry_legacy(recorded_at, voltage, temp, is_valid, source_file) FROM '%s' WITH (FORMAT csv, HEADER true)", fullpath)
 
 	cmd := exec.CommandContext(ctx, "psql", connStr, "-c", copyCmd)
 
@@ -89,17 +185,16 @@ func runPsqlCopy(ctx context.Context, fullpath string) error {
 
 func runOnce() {
 	outDir := getEnvDef("CSV_OUT_DIR", "/data/csv")
-
-	fullpath, err := generateCSV(outDir)
+	csvPath, err := generateFiles(outDir)
 	if err != nil {
-		errorLogger.Printf("generateCSV failed: %v", err)
+		errorLogger.Printf("generateFiles failed: %v", err)
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := runPsqlCopy(ctx, fullpath); err != nil {
+	if err := runPsqlCopy(ctx, csvPath); err != nil {
 		errorLogger.Printf("runPsqlCopy failed: %v", err)
 	}
 }
@@ -117,7 +212,6 @@ func parsePeriod() int {
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
 	initLoggers()
 
 	if getEnvDef("RUN_ONCE", "") == "1" {
@@ -127,16 +221,13 @@ func main() {
 	}
 
 	period := parsePeriod()
-	infoLogger.Printf("Legacy service started. Generating data every %d seconds.", period)
+	infoLogger.Printf("Service started. Generating XLSX/CSV data every %d seconds.", period)
 
 	ticker := time.NewTicker(time.Duration(period) * time.Second)
 	defer ticker.Stop()
 	runOnce()
 
-	for {
-		select {
-		case <-ticker.C:
-			runOnce()
-		}
+	for range ticker.C {
+		runOnce()
 	}
 }
